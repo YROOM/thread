@@ -5,5 +5,9 @@ public class StudyGit {
   public static void main(String[] args) {
     //
     System.out.println("yroom git init git");
+    System.out.println("yroom git add git");
+    System.out.println("git diff");
+    System.out.println("ssss");
+    System.out.println();
   }
 }
