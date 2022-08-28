@@ -17,8 +17,13 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j(topic = "c.testpool")
 public class TestPool {
     public static void main(String[] args) {
-        ThreadPool threadPool = new ThreadPool(2, 1000, TimeUnit.MILLISECONDS, 10);
-        for (int i = 0; i < 15; i++) {
+        ThreadPool threadPool = new ThreadPool(1, 1000, TimeUnit.MILLISECONDS, 1,(queue,task)->{
+            //死等的逻辑
+           /* queue.put(task);*/
+            //timeout waiting
+            queue.offer(task,500,TimeUnit.MILLISECONDS);
+        });
+        for (int i = 0; i < 3; i++) {
             int j = i;
 
             threadPool.execute(() -> {
@@ -60,6 +65,8 @@ class ThreadPool {
     private TimeUnit timeUnit;
 
 
+    private RejectPolicy<Runnable> rejectPolicy;
+
     public void execute(Runnable task) {
         synchronized (workers) {
             if (workers.size() < coreSize) {
@@ -68,19 +75,22 @@ class ThreadPool {
                 worker.start();
                 workers.add(worker);
             } else {
+                // taskQueue.put(task);
+                taskQueue.tryPut(rejectPolicy, task);
 
-                taskQueue.put(task);
+
             }
         }
 
     }
 
 
-    public ThreadPool(int coreSize, long timeOut, TimeUnit timeUnit, int queueCapcity) {
+    public ThreadPool(int coreSize, long timeOut, TimeUnit timeUnit, int queueCapcity, RejectPolicy<Runnable> rejectPolicy) {
         this.coreSize = coreSize;
         this.timeOut = timeOut;
         this.timeUnit = timeUnit;
         this.taskQueue = new BlockingQueue<>(queueCapcity);
+        this.rejectPolicy = rejectPolicy;
     }
 
     class Worker extends Thread {
@@ -234,9 +244,25 @@ class BlockingQueue<T> {
             lock.unlock();
         }
     }
-    
-    
-    
-    
-    
+
+    public void tryPut(RejectPolicy<T> rejectPolicy, T task) {
+        lock.lock();
+        try {
+            if (deque.size() == capcity) {
+                rejectPolicy.reject(this,task);
+                
+            }else {
+                log.debug("加入任务队列{}", task);
+                deque.addLast(task);
+                emptyWaitSet.signal();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+@FunctionalInterface
+interface RejectPolicy<T> {
+    void reject(BlockingQueue<T> queue, T task);
 }
